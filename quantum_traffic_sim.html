@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Traffic Simulator</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Lucide icons as SVG components
+        const Play = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>;
+        const Pause = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>;
+        const RotateCcw = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>;
+        const Settings = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m-2 2l-4.2 4.2m13.2-.8l-6-6m-6 6l-6-6"></path></svg>;
+        const Zap = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>;
+        const Navigation = ({ className }) => <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>;
+
+        const QuantumTrafficSimulator = () => {
+          const [gridSize, setGridSize] = useState(8);
+          const [numVehicles, setNumVehicles] = useState(5);
+          const [vehicles, setVehicles] = useState([]);
+          const [isRunning, setIsRunning] = useState(false);
+          const [useQuantum, setUseQuantum] = useState(true);
+          const [metrics, setMetrics] = useState({
+            quantumSteps: 0,
+            classicalSteps: 0,
+            quantumCollisions: 0,
+            classicalCollisions: 0
+          });
+          const [heatmap, setHeatmap] = useState([]);
+          const animationRef = useRef(null);
+
+          useEffect(() => {
+            const grid = Array(gridSize).fill(null).map(() => Array(gridSize).fill(0));
+            setHeatmap(grid);
+          }, [gridSize]);
+
+          const initializeVehicles = () => {
+            const newVehicles = [];
+            for (let i = 0; i < numVehicles; i++) {
+              newVehicles.push({
+                id: i,
+                x: Math.floor(Math.random() * gridSize),
+                y: Math.floor(Math.random() * gridSize),
+                destX: Math.floor(Math.random() * gridSize),
+                destY: Math.floor(Math.random() * gridSize),
+                color: `hsl(${(i * 360) / numVehicles}, 70%, 50%)`,
+                path: [],
+                quantumState: Math.random()
+              });
+            }
+            setVehicles(newVehicles);
+            setMetrics({
+              quantumSteps: 0,
+              classicalSteps: 0,
+              quantumCollisions: 0,
+              classicalCollisions: 0
+            });
+          };
+
+          useEffect(() => {
+            initializeVehicles();
+          }, [numVehicles, gridSize]);
+
+          const quantumDecision = (vehicle, occupiedPositions) => {
+            const possibleMoves = [];
+            const dx = vehicle.destX - vehicle.x;
+            const dy = vehicle.destY - vehicle.y;
+
+            if (dx > 0 && vehicle.x < gridSize - 1) possibleMoves.push({ x: vehicle.x + 1, y: vehicle.y, priority: 2 });
+            if (dx < 0 && vehicle.x > 0) possibleMoves.push({ x: vehicle.x - 1, y: vehicle.y, priority: 2 });
+            if (dy > 0 && vehicle.y < gridSize - 1) possibleMoves.push({ x: vehicle.x, y: vehicle.y + 1, priority: 2 });
+            if (dy < 0 && vehicle.y > 0) possibleMoves.push({ x: vehicle.x, y: vehicle.y - 1, priority: 2 });
+
+            if (vehicle.x < gridSize - 1) possibleMoves.push({ x: vehicle.x + 1, y: vehicle.y, priority: 1 });
+            if (vehicle.x > 0) possibleMoves.push({ x: vehicle.x - 1, y: vehicle.y, priority: 1 });
+            if (vehicle.y < gridSize - 1) possibleMoves.push({ x: vehicle.x, y: vehicle.y + 1, priority: 1 });
+            if (vehicle.y > 0) possibleMoves.push({ x: vehicle.x, y: vehicle.y - 1, priority: 1 });
+
+            const validMoves = possibleMoves.filter(move => {
+              const key = `${move.x},${move.y}`;
+              return !occupiedPositions.has(key);
+            });
+
+            if (validMoves.length === 0) return { x: vehicle.x, y: vehicle.y };
+
+            const quantumPhase = Math.sin(vehicle.quantumState * Math.PI * 2 + Date.now() * 0.001);
+            const weights = validMoves.map((move, idx) => {
+              const distance = Math.abs(move.x - vehicle.destX) + Math.abs(move.y - vehicle.destY);
+              const quantumBias = Math.abs(quantumPhase + idx * 0.3);
+              return (1 / (distance + 1)) * move.priority * (1 + quantumBias);
+            });
+
+            const totalWeight = weights.reduce((a, b) => a + b, 0);
+            let random = Math.random() * totalWeight;
+            
+            for (let i = 0; i < validMoves.length; i++) {
+              random -= weights[i];
+              if (random <= 0) return validMoves[i];
+            }
+
+            return validMoves[validMoves.length - 1];
+          };
+
+          const classicalDecision = (vehicle, occupiedPositions) => {
+            const possibleMoves = [];
+            const dx = vehicle.destX - vehicle.x;
+            const dy = vehicle.destY - vehicle.y;
+
+            if (dx > 0 && vehicle.x < gridSize - 1) possibleMoves.push({ x: vehicle.x + 1, y: vehicle.y });
+            else if (dx < 0 && vehicle.x > 0) possibleMoves.push({ x: vehicle.x - 1, y: vehicle.y });
+            
+            if (dy > 0 && vehicle.y < gridSize - 1) possibleMoves.push({ x: vehicle.x, y: vehicle.y + 1 });
+            else if (dy < 0 && vehicle.y > 0) possibleMoves.push({ x: vehicle.x, y: vehicle.y - 1 });
+
+            const validMoves = possibleMoves.filter(move => {
+              const key = `${move.x},${move.y}`;
+              return !occupiedPositions.has(key);
+            });
+
+            if (validMoves.length === 0) return { x: vehicle.x, y: vehicle.y };
+
+            const bestMove = validMoves.reduce((best, move) => {
+              const dist = Math.abs(move.x - vehicle.destX) + Math.abs(move.y - vehicle.destY);
+              const bestDist = Math.abs(best.x - vehicle.destX) + Math.abs(best.y - vehicle.destY);
+              return dist < bestDist ? move : best;
+            });
+
+            return bestMove;
+          };
+
+          const updateSimulation = () => {
+            setVehicles(prevVehicles => {
+              const occupiedPositions = new Set();
+              const newVehicles = [];
+              let collisions = 0;
+
+              prevVehicles.forEach(v => {
+                occupiedPositions.add(`${v.x},${v.y}`);
+              });
+
+              prevVehicles.forEach(vehicle => {
+                if (vehicle.x === vehicle.destX && vehicle.y === vehicle.destY) {
+                  newVehicles.push({
+                    ...vehicle,
+                    destX: Math.floor(Math.random() * gridSize),
+                    destY: Math.floor(Math.random() * gridSize),
+                    path: []
+                  });
+                  return;
+                }
+
+                const currentKey = `${vehicle.x},${vehicle.y}`;
+                occupiedPositions.delete(currentKey);
+
+                const nextPos = useQuantum 
+                  ? quantumDecision(vehicle, occupiedPositions)
+                  : classicalDecision(vehicle, occupiedPositions);
+
+                const nextKey = `${nextPos.x},${nextPos.y}`;
+                
+                if (occupiedPositions.has(nextKey)) {
+                  collisions++;
+                  newVehicles.push(vehicle);
+                } else {
+                  occupiedPositions.add(nextKey);
+                  newVehicles.push({
+                    ...vehicle,
+                    x: nextPos.x,
+                    y: nextPos.y,
+                    path: [...vehicle.path, { x: vehicle.x, y: vehicle.y }].slice(-20),
+                    quantumState: (vehicle.quantumState + 0.1) % 1
+                  });
+                }
+              });
+
+              setMetrics(prev => ({
+                ...prev,
+                [useQuantum ? 'quantumSteps' : 'classicalSteps']: prev[useQuantum ? 'quantumSteps' : 'classicalSteps'] + 1,
+                [useQuantum ? 'quantumCollisions' : 'classicalCollisions']: prev[useQuantum ? 'quantumCollisions' : 'classicalCollisions'] + collisions
+              }));
+
+              setHeatmap(prevHeatmap => {
+                const newHeatmap = prevHeatmap.map(row => [...row]);
+                newVehicles.forEach(v => {
+                  newHeatmap[v.y][v.x] = Math.min(newHeatmap[v.y][v.x] + 1, 100);
+                });
+                return newHeatmap.map(row => row.map(val => val * 0.95));
+              });
+
+              return newVehicles;
+            });
+          };
+
+          useEffect(() => {
+            if (isRunning) {
+              animationRef.current = setInterval(updateSimulation, 200);
+            } else {
+              if (animationRef.current) clearInterval(animationRef.current);
+            }
+            return () => {
+              if (animationRef.current) clearInterval(animationRef.current);
+            };
+          }, [isRunning, useQuantum, gridSize]);
+
+          const cellSize = 50;
+          const maxHeat = Math.max(...heatmap.flat(), 1);
+
+          return (
+            <div className="w-full max-w-6xl mx-auto p-6 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl shadow-2xl">
+              <div className="mb-6">
+                <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                  <Zap className="text-yellow-400" />
+                  Quantum Traffic Grid Simulator
+                </h1>
+                <p className="text-slate-300">Comparing Classical vs Quantum Routing Algorithms</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div className="lg:col-span-2">
+                  <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                    <svg width={gridSize * cellSize} height={gridSize * cellSize} className="mx-auto">
+                      {heatmap.map((row, y) =>
+                        row.map((heat, x) => (
+                          <rect
+                            key={`${x}-${y}`}
+                            x={x * cellSize}
+                            y={y * cellSize}
+                            width={cellSize}
+                            height={cellSize}
+                            fill={`rgba(139, 92, 246, ${heat / maxHeat * 0.3})`}
+                            stroke="#334155"
+                            strokeWidth="1"
+                          />
+                        ))
+                      )}
+                      
+                      {vehicles.map(vehicle => (
+                        <g key={vehicle.id}>
+                          {vehicle.path.map((point, idx) => (
+                            <circle
+                              key={idx}
+                              cx={point.x * cellSize + cellSize / 2}
+                              cy={point.y * cellSize + cellSize / 2}
+                              r={2}
+                              fill={vehicle.color}
+                              opacity={0.3 * (idx / vehicle.path.length)}
+                            />
+                          ))}
+                          
+                          <circle
+                            cx={vehicle.destX * cellSize + cellSize / 2}
+                            cy={vehicle.destY * cellSize + cellSize / 2}
+                            r={8}
+                            fill="none"
+                            stroke={vehicle.color}
+                            strokeWidth="2"
+                            strokeDasharray="4,4"
+                          />
+                          
+                          <circle
+                            cx={vehicle.x * cellSize + cellSize / 2}
+                            cy={vehicle.y * cellSize + cellSize / 2}
+                            r={12}
+                            fill={vehicle.color}
+                            stroke="white"
+                            strokeWidth="2"
+                          />
+                          
+                          <text
+                            x={vehicle.x * cellSize + cellSize / 2}
+                            y={vehicle.y * cellSize + cellSize / 2}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fill="white"
+                            fontSize="10"
+                            fontWeight="bold"
+                          >
+                            {vehicle.id + 1}
+                          </text>
+                        </g>
+                      ))}
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                      <Settings />
+                      Controls
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => setIsRunning(!isRunning)}
+                        className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition ${
+                          isRunning 
+                            ? 'bg-red-600 hover:bg-red-700 text-white' 
+                            : 'bg-green-600 hover:bg-green-700 text-white'
+                        }`}
+                      >
+                        {isRunning ? <Pause /> : <Play />}
+                        {isRunning ? 'Pause' : 'Start'}
+                      </button>
+
+                      <button
+                        onClick={initializeVehicles}
+                        className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition"
+                      >
+                        <RotateCcw />
+                        Reset
+                      </button>
+
+                      <div className="pt-2">
+                        <label className="flex items-center justify-between text-white mb-2">
+                          <span className="flex items-center gap-2">
+                            {useQuantum ? <Zap className="text-yellow-400" /> : <Navigation className="text-blue-400" />}
+                            Algorithm
+                          </span>
+                          <span className="text-sm font-medium">{useQuantum ? 'Quantum' : 'Classical'}</span>
+                        </label>
+                        <button
+                          onClick={() => setUseQuantum(!useQuantum)}
+                          className={`w-full px-4 py-2 rounded-lg font-medium transition ${
+                            useQuantum 
+                              ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          Switch to {useQuantum ? 'Classical' : 'Quantum'}
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-white mb-2">
+                          Vehicles: {numVehicles}
+                        </label>
+                        <input
+                          type="range"
+                          min="2"
+                          max="12"
+                          value={numVehicles}
+                          onChange={(e) => setNumVehicles(Number(e.target.value))}
+                          className="w-full"
+                          disabled={isRunning}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-white mb-2">
+                          Grid Size: {gridSize}x{gridSize}
+                        </label>
+                        <input
+                          type="range"
+                          min="6"
+                          max="12"
+                          value={gridSize}
+                          onChange={(e) => setGridSize(Number(e.target.value))}
+                          className="w-full"
+                          disabled={isRunning}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                    <h3 className="text-lg font-semibold text-white mb-3">Metrics</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between text-yellow-400">
+                        <span>Quantum Steps:</span>
+                        <span className="font-bold">{metrics.quantumSteps}</span>
+                      </div>
+                      <div className="flex justify-between text-yellow-400">
+                        <span>Quantum Collisions:</span>
+                        <span className="font-bold">{metrics.quantumCollisions}</span>
+                      </div>
+                      <div className="flex justify-between text-blue-400 pt-2 border-t border-slate-700">
+                        <span>Classical Steps:</span>
+                        <span className="font-bold">{metrics.classicalSteps}</span>
+                      </div>
+                      <div className="flex justify-between text-blue-400">
+                        <span>Classical Collisions:</span>
+                        <span className="font-bold">{metrics.classicalCollisions}</span>
+                      </div>
+                      {metrics.quantumSteps > 0 && metrics.classicalSteps > 0 && (
+                        <div className="pt-2 border-t border-slate-700">
+                          <div className="flex justify-between text-green-400">
+                            <span>Efficiency Ratio:</span>
+                            <span className="font-bold">
+                              {((metrics.classicalCollisions / metrics.classicalSteps) / 
+                                (metrics.quantumCollisions / metrics.quantumSteps || 1)).toFixed(2)}x
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 text-sm text-slate-300">
+                <p><strong className="text-white">Legend:</strong> Solid circles = vehicles, Dashed circles = destinations, Purple heatmap = traffic density</p>
+                <p className="mt-2">The quantum algorithm uses superposition-inspired probabilistic decision making with phase-based weighting, while classical uses greedy shortest path.</p>
+              </div>
+            </div>
+          );
+        };
+
+        ReactDOM.render(<QuantumTrafficSimulator />, document.getElementById('root'));
+    </script>
+</body>
+</html>
